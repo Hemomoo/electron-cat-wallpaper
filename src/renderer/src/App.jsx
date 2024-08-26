@@ -1,7 +1,7 @@
 import Masonry from 'react-responsive-masonry'
-import { useState } from 'react';
-import { PhotoSlider } from 'react-photo-view';
-import 'react-photo-view/dist/react-photo-view.css';
+import { useState } from 'react'
+import { PhotoSlider } from 'react-photo-view'
+import 'react-photo-view/dist/react-photo-view.css'
 
 const photoData = [
   {
@@ -176,8 +176,9 @@ function App() {
           visible={visible}
           onClose={() => setVisible(false)}
           index={index}
-          onIndexChange={setIndex}>
-        </PhotoSlider>
+          onIndexChange={setIndex}
+        ></PhotoSlider>
+        <div className="gb-red">122212</div>
       </div>
     </>
   )

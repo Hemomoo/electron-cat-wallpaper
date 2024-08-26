@@ -1,11 +1,104 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
+const { exec } = require('child_process')
+const fs = require('fs')
 import { join } from 'path'
+const path = require('path')
+const https = require('https')
+const os = require('os')
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import contextMenu from 'electron-context-menu'
 
+async function downloadAndSetWallpaper(url, fileName) {
+  return new Promise((resolve, reject) => {
+    const homeDir = os.homedir()
+    const fileNameWithExtension = `${fileName}.jpg`
+    const imagePath = path.join(homeDir, fileNameWithExtension)
+
+    const file = fs.createWriteStream(imagePath)
+    https
+      .get(url, (response) => {
+        response.pipe(file)
+
+        file.on('finish', () => {
+          file.close((err) => {
+            if (err) {
+              reject(`Failed to close file: ${err.message}`)
+              return
+            }
+            setWallpaper(imagePath).then(resolve).catch(reject)
+          })
+        })
+      })
+      .on('error', (err) => {
+        fs.unlink(imagePath, () => {}) // Cleanup the file on error
+        reject(`Failed to download image: ${err.message}`)
+      })
+  })
+}
+
+function setWallpaper(imagePath) {
+  return new Promise((resolve, reject) => {
+    const script = `
+    tell application "System Events"
+      set desktopCount to count of desktops
+      repeat with desktopNumber from 1 to desktopCount
+        tell desktop desktopNumber
+          set picture to POSIX file "${imagePath}"
+        end tell
+      end repeat
+    end tell
+    `
+
+    exec(`osascript -e '${script}'`, (error, stdout, stderr) => {
+      if (error) {
+        reject(`Error setting wallpaper: ${error.message}`)
+        return
+      }
+      if (stderr) {
+        reject(`Error: ${stderr}`)
+        return
+      }
+      resolve('Wallpaper set successfully.')
+    })
+  })
+}
+
 contextMenu({
-  // menu: action=> [actions.separator()]
+  menu: (actions) => [actions.separator()],
+  prepend: (defaultActions, parameters) => [
+    {
+      label: '设置壁纸',
+      // Only show it when right-clicking images
+      visible: parameters.mediaType === 'image',
+      onClick: (menuItem) => {
+        console.log('🚀 ~ parameters:', encodeURIComponent(parameters))
+        parameters.srcURL = menuItem.transform
+          ? menuItem.transform(parameters.srcURL)
+          : parameters.srcURL
+        const url = parameters.srcURL
+        if (url) {
+          downloadAndSetWallpaper(url, 'wallpaper')
+            .then((result) => {
+              console.log(`Result: ${result}`)
+            })
+            .catch((error) => {
+              console.log(`Error: ${error}`)
+            })
+        }
+      }
+    },
+    {
+      label: 'Search Google for “{selection}”',
+      // Only show it when right-clicking text
+      visible: parameters.selectionText.trim().length > 0,
+      click: () => {
+        shell.openExternal(
+          `https://google.com/search?q=${encodeURIComponent(parameters.selectionText)}`
+        )
+      }
+    }
+  ],
   showSaveImageAs: true,
   showCopyImage: true,
   showInspectElement: true
