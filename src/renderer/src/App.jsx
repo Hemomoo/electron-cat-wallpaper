@@ -1,7 +1,20 @@
 import Masonry from 'react-responsive-masonry'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PhotoSlider } from 'react-photo-view'
 import 'react-photo-view/dist/react-photo-view.css'
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle
+  // DrawerTrigger
+} from '@/components/ui/drawer'
+import { DownloadIcon } from '@radix-ui/react-icons'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 const photoData = [
   {
@@ -149,10 +162,32 @@ const photoData = [
 function App() {
   const [visible, setVisible] = useState(false)
   const [index, setIndex] = useState(0)
+  const [openDrawer, setOpenDrawer] = useState(false)
+  const [inputUrl, selInputUrl] = useState('')
 
   const preview = (index) => {
     setVisible(true)
     setIndex(index)
+  }
+
+  // eslint-disable-next-line no-undef
+  useEffect(() => {
+    console.log('window', window?.electronAPI)
+    // window?.electronAPI.onOpenPhotoSlider(() => {
+    //   preview(index)
+    // })
+  }, [])
+
+  window?.electronAPI.onCloseDrawer(() => {
+    setOpenDrawer(false)
+  })
+
+  window?.electronAPI.onOpenDrawer(() => {
+    setOpenDrawer(true)
+  })
+
+  const downImg = () => {
+    window.electronAPI.downImg(inputUrl)
   }
 
   return (
@@ -178,7 +213,32 @@ function App() {
           index={index}
           onIndexChange={setIndex}
         ></PhotoSlider>
-        <div className="gb-red">122212</div>
+        {/* 增加left drawer */}
+        <Drawer direction="left" open={openDrawer}>
+          {/* <DrawerTrigger>Open</DrawerTrigger> */}
+          <DrawerContent className="h-full w-1/3">
+            <DrawerHeader>
+              <DrawerTitle>Are you absolutely sure?</DrawerTitle>
+              <DrawerDescription>This action cannot be undone.</DrawerDescription>
+            </DrawerHeader>
+            <div className="flex w-full max-w-sm items-center space-x-2">
+              <Input
+                value={inputUrl}
+                placeholder="粘贴链接"
+                onChange={(e) => selInputUrl(e.target.value)}
+              />
+              <Button variant="outline" size="icon" onClick={downImg}>
+                <DownloadIcon className="h-4 w-4" />
+              </Button>
+            </div>
+            <DrawerFooter>
+              <Button>Submit</Button>
+              <DrawerClose>
+                <Button variant="outline">Cancel</Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
       </div>
     </>
   )

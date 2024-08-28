@@ -1,25 +1,27 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu } from 'electron'
 const { exec } = require('child_process')
 const fs = require('fs')
 import { join } from 'path'
 const path = require('path')
 const https = require('https')
-const os = require('os')
+import { promisify } from 'util'
+// const os = require('os')
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import contextMenu from 'electron-context-menu'
 
+// 获取指定目录的文件名
+
 async function downloadAndSetWallpaper(url, fileName) {
   return new Promise((resolve, reject) => {
-    const homeDir = os.homedir()
+    const wallpaperDir = path.join(__dirname, '..', '..', 'wallpaper')
+    promisify(fs.mkdir)(wallpaperDir, { recursive: true })
     const fileNameWithExtension = `${fileName}.jpg`
-    const imagePath = path.join(homeDir, fileNameWithExtension)
-
+    const imagePath = path.join(wallpaperDir, fileNameWithExtension)
     const file = fs.createWriteStream(imagePath)
     https
       .get(url, (response) => {
         response.pipe(file)
-
         file.on('finish', () => {
           file.close((err) => {
             if (err) {
@@ -65,20 +67,17 @@ function setWallpaper(imagePath) {
 }
 
 contextMenu({
-  menu: (actions) => [actions.separator()],
-  prepend: (defaultActions, parameters) => [
+  append: (defaultActions, parameters) => [
     {
       label: '设置壁纸',
-      // Only show it when right-clicking images
       visible: parameters.mediaType === 'image',
-      onClick: (menuItem) => {
-        console.log('🚀 ~ parameters:', encodeURIComponent(parameters))
+      click: (menuItem) => {
         parameters.srcURL = menuItem.transform
           ? menuItem.transform(parameters.srcURL)
           : parameters.srcURL
         const url = parameters.srcURL
         if (url) {
-          downloadAndSetWallpaper(url, 'wallpaper')
+          downloadAndSetWallpaper(url, path.basename(url, path.extname(url)))
             .then((result) => {
               console.log(`Result: ${result}`)
             })
@@ -127,6 +126,32 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  const menuTemplate = Menu.buildFromTemplate([
+    {
+      label: 'Setting',
+      submenu: [
+        {
+          label: 'Open Drawer',
+          click: () => {
+            console.log('close drawer')
+            mainWindow.webContents.send('open-drawer')
+          }
+        },
+        {
+          label: 'Close Drawer',
+          click: () => {
+            console.log('close drawer')
+            mainWindow.webContents.send('close-drawer')
+          }
+        }
+      ]
+    }
+  ])
+
+  mainWindow.webContents.send('set-wallpaper')
+
+  Menu.setApplicationMenu(menuTemplate)
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -152,7 +177,12 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
-
+  // 下载图片
+  ipcMain.on('downImg', (event, url) => {
+    downloadAndSetWallpaper(url, path.basename(url, path.extname(url))).then((path) => {
+      event.reply('downImg', path)
+    })
+  })
   createWindow()
 
   app.on('activate', function () {
