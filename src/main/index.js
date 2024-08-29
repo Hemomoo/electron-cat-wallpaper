@@ -4,20 +4,32 @@ const fs = require('fs')
 import { join } from 'path'
 const path = require('path')
 const https = require('https')
-import { promisify } from 'util'
-// const os = require('os')
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import contextMenu from 'electron-context-menu'
 
-// 获取指定目录的文件名
+// 创建文件夹
+const createDir = () => {
+  const projectRoot = app.getPath('appData')
+  // 定义文件夹路径
+  const folderPath = path.join(projectRoot, 'cat-wallpaper', 'wallpaper')
+  // 检查文件夹是否存在
+  if (!fs.existsSync(folderPath)) {
+    // 如果文件夹不存在，创建它
+    fs.mkdirSync(folderPath)
+    console.log('文件夹已创建:', folderPath)
+    return folderPath
+  } else {
+    console.log('文件夹已存在:', folderPath)
+    return folderPath
+  }
+}
 
 async function downloadAndSetWallpaper(url, fileName) {
   return new Promise((resolve, reject) => {
-    const wallpaperDir = path.join(__dirname, '..', '..', 'wallpaper')
-    promisify(fs.mkdir)(wallpaperDir, { recursive: true })
+    const folderPath = createDir() // 创建文件夹
     const fileNameWithExtension = `${fileName}.jpg`
-    const imagePath = path.join(wallpaperDir, fileNameWithExtension)
+    const imagePath = path.join(folderPath, fileNameWithExtension)
     const file = fs.createWriteStream(imagePath)
     https
       .get(url, (response) => {
