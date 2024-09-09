@@ -1,6 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu, dialog } from 'electron'
 const { exec } = require('child_process')
+const sizeOf = require('image-size')
 const fs = require('fs')
+const { fileURLToPath } = require('url')
 import { join } from 'path'
 const path = require('path')
 const https = require('https')
@@ -13,6 +15,7 @@ const createDir = () => {
   const projectRoot = app.getPath('appData')
   // 定义文件夹路径
   const folderPath = path.join(projectRoot, 'cat-wallpaper', 'wallpaper')
+
   // 检查文件夹是否存在
   if (!fs.existsSync(folderPath)) {
     // 如果文件夹不存在，创建它
@@ -25,33 +28,59 @@ const createDir = () => {
   }
 }
 
-async function downloadAndSetWallpaper(url, fileName) {
+const downloadImage = (url, fileName) => {
+  console.log("🚀 ~ downloadImage ~ url:", url)
   return new Promise((resolve, reject) => {
-    const folderPath = createDir() // 创建文件夹
+    const folderPath = createDir()
     const fileNameWithExtension = `${fileName}.jpg`
     const imagePath = path.join(folderPath, fileNameWithExtension)
     const file = fs.createWriteStream(imagePath)
-    https
-      .get(url, (response) => {
-        response.pipe(file)
-        file.on('finish', () => {
-          file.close((err) => {
-            if (err) {
-              reject(`Failed to close file: ${err.message}`)
-              return
-            }
-            setWallpaper(imagePath).then(resolve).catch(reject)
-          })
+
+    https.get(url, (response) => {
+      response.pipe(file)
+      file.on('finish', () => {
+        file.close((err) => {
+          if (err) {
+            reject(`Failed to close file: ${err.message}`)
+          } else {
+            resolve(imagePath)
+          }
         })
       })
-      .on('error', (err) => {
-        fs.unlink(imagePath, () => {}) // Cleanup the file on error
-        reject(`Failed to download image: ${err.message}`)
-      })
+    })
   })
 }
 
-function setWallpaper(imagePath) {
+async function downloadAndSetWallpaper(url, fileName) {
+  const folderPath = createDir()
+  const allFileNames = fs.readdirSync(folderPath)
+  const fileNameWithExtension = `${fileName}.jpg`
+
+  if (allFileNames.includes(fileNameWithExtension)) {
+    const result = dialog.showMessageBoxSync({
+      message: '文件已存在，是否覆盖？',
+      buttons: ['确定', '取消']
+    })
+    if (result == 0) {
+      console.log('文件已存在，正在覆盖')
+      return downloadImage(url, fileName)
+    } else {
+      return Promise.resolve('文件已存在')
+    }
+  } else {
+    const result = dialog.showMessageBoxSync({
+      message: '是否下载该壁纸？',
+      buttons: ['确定', '取消']
+    })
+    if (Number(result) === 0) {
+      return downloadImage(url, fileName)
+    } else {
+      return Promise.resolve('取消下载')
+    }
+  }
+}
+
+function setWallpaperMac(imagePath) {
   return new Promise((resolve, reject) => {
     const script = `
     tell application "System Events"
@@ -87,16 +116,8 @@ contextMenu({
         parameters.srcURL = menuItem.transform
           ? menuItem.transform(parameters.srcURL)
           : parameters.srcURL
-        const url = parameters.srcURL
-        if (url) {
-          downloadAndSetWallpaper(url, path.basename(url, path.extname(url)))
-            .then((result) => {
-              console.log(`Result: ${result}`)
-            })
-            .catch((error) => {
-              console.log(`Error: ${error}`)
-            })
-        }
+        const url = fileURLToPath(parameters.srcURL)
+        setWallpaperMac(url)
       }
     },
     {
@@ -125,7 +146,10 @@ function createWindow() {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      // nodeIntegration: true, // 必须设置为 true 以允许文件访问
+      // contextIsolation: false,
+      webSecurity: false
     }
   })
 
@@ -145,23 +169,44 @@ function createWindow() {
         {
           label: 'Open Drawer',
           click: () => {
-            console.log('close drawer')
             mainWindow.webContents.send('open-drawer')
           }
         },
         {
           label: 'Close Drawer',
           click: () => {
-            console.log('close drawer')
             mainWindow.webContents.send('close-drawer')
+          }
+        },
+        {
+          label: 'file download',
+          click: () => {
+            // const projectRoot = app.getPath('appData')
+            // // 定义文件夹路径
+            // const folderPath = path.join(projectRoot, 'cat-wallpaper', 'wallpaper')
+            // const allFileNames = fs.readdirSync(folderPath)
+            // const allFilePaths = allFileNames.map((fileName) => path.join(folderPath, fileName))
+            // mainWindow.webContents.send('all-fill-paths', allFilePaths)
+            // ipcMain.on('downImg', (event, url) => {
+            //   downloadAndSetWallpaper(url, path.basename(url, path.extname(url))).then((path) => {
+            //     event.reply('downImg', path)
+            //   })
+            // })
+            // ipcMain.
+            // for (const fileName of allFileNames) {
+            //   console.log(path.join(folderPath, fileName))
+            // }
+            // console.log('file download')
           }
         }
       ]
     }
   ])
 
+  // 主进程发送信息到渲染进程
   mainWindow.webContents.send('set-wallpaper')
 
+  // 注册菜单
   Menu.setApplicationMenu(menuTemplate)
 
   // HMR for renderer base on electron-vite cli.
@@ -171,6 +216,32 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.webContents.openDevTools({
+    mode: 'bottom'
+  })
+}
+
+// 获取壁纸保存路径
+const getWallpaperPath = () => {
+  const projectRoot = app.getPath('appData')
+  // 定义文件夹路径
+  const folderPath = path.join(projectRoot, 'cat-wallpaper', 'wallpaper')
+  // 获取文件夹下面所有的文件
+  return fs.readdirSync(folderPath).map((fileName) => {
+    const imgPath = path.join(folderPath, fileName)
+    const stat = fs.statSync(imgPath)
+    if (stat.size === 0) {
+      console.log('The file is empty.')
+    } else {
+      const dimensions = sizeOf(imgPath)
+      return {
+        src: `file://${imgPath}`,
+        height: dimensions.height,
+        width: dimensions.width
+      }
+    }
+  })
 }
 
 // This method will be called when Electron has finished
@@ -189,12 +260,17 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
-  // 下载图片
-  ipcMain.on('downImg', (event, url) => {
-    downloadAndSetWallpaper(url, path.basename(url, path.extname(url))).then((path) => {
-      event.reply('downImg', path)
+
+  //  渲染进程获取文件路径
+  ipcMain.handle('all-file-paths', getWallpaperPath)
+
+  ipcMain.handle('downImg', async (event, url) => {
+    await downloadAndSetWallpaper(url, path.basename(url, path.extname(url))).then((allPath) => {
+      console.log('>>>>', allPath)
     })
+    return getWallpaperPath()
   })
+
   createWindow()
 
   app.on('activate', function () {

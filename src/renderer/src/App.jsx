@@ -162,8 +162,9 @@ const photoData = [
 function App() {
   const [visible, setVisible] = useState(false)
   const [index, setIndex] = useState(0)
-  const [openDrawer, setOpenDrawer] = useState(false)
+  const [openDrawer, setOpenDrawer] = useState(true)
   const [inputUrl, selInputUrl] = useState('')
+  const [photoList, setPhoneList] = useState(photoData)
 
   const preview = (index) => {
     setVisible(true)
@@ -172,11 +173,15 @@ function App() {
 
   // eslint-disable-next-line no-undef
   useEffect(() => {
-    console.log('window', window?.electronAPI)
-    // window?.electronAPI.onOpenPhotoSlider(() => {
-    //   preview(index)
-    // })
+    ;(async () => {
+      allFilePaths()
+    })()
   }, [])
+
+  const allFilePaths = async () => {
+    const filePath = await window.electronAPI.allFilePaths()
+    setPhoneList(filePath.filter((item) => item && item?.src !== undefined))
+  }
 
   window?.electronAPI.onCloseDrawer(() => {
     setOpenDrawer(false)
@@ -186,15 +191,18 @@ function App() {
     setOpenDrawer(true)
   })
 
-  const downImg = () => {
-    window.electronAPI.downImg(inputUrl)
+  const downImg = async () => {
+    const filePath = await window.electronAPI.downImg(inputUrl)
+    setPhoneList(filePath.filter((item) => item && item?.src !== undefined))
+    setOpenDrawer(false)
+    selInputUrl('')
   }
 
   return (
     <>
       <div className="w-screen h-screen overflow-auto">
         <Masonry columnsCount={3} gutter="10px">
-          {photoData.map((image, i) => (
+          {photoList.map((image, i) => (
             <img
               className="cursor-pointer"
               key={i}
@@ -207,7 +215,7 @@ function App() {
           ))}
         </Masonry>
         <PhotoSlider
-          images={photoData}
+          images={photoList}
           visible={visible}
           onClose={() => setVisible(false)}
           index={index}
@@ -221,20 +229,22 @@ function App() {
               <DrawerTitle>Are you absolutely sure?</DrawerTitle>
               <DrawerDescription>This action cannot be undone.</DrawerDescription>
             </DrawerHeader>
-            <div className="flex w-full max-w-sm items-center space-x-2">
+            <div className="flex w-full max-w-sm items-center space-x-2 mt-2 p-2">
               <Input
                 value={inputUrl}
                 placeholder="粘贴链接"
-                onChange={(e) => selInputUrl(e.target.value)}
+                onChange={(e) => {
+                  console.log(e)
+                  selInputUrl(e.target.value)
+                }}
               />
               <Button variant="outline" size="icon" onClick={downImg}>
                 <DownloadIcon className="h-4 w-4" />
               </Button>
             </div>
             <DrawerFooter>
-              <Button>Submit</Button>
               <DrawerClose>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" onClick={()=>{setOpenDrawer(false) }}>Cancel</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>

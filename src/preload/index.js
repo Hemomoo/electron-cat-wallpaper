@@ -15,7 +15,9 @@ if (process.contextIsolated) {
       onCloseDrawer: (callback) =>
         ipcRenderer.on('close-drawer', (_event, value) => callback(value)),
       onOpenDrawer: (callback) => ipcRenderer.on('open-drawer', (_event, value) => callback(value)),
-      downImg: (url) => ipcRenderer.send('downImg', url)
+      // 渲染进程向主进程发送消息
+      downImg: (url) => ipcRenderer.invoke('downImg', url),
+      allFilePaths: () => ipcRenderer.invoke('all-file-paths')
     })
   } catch (error) {
     console.error(error)
